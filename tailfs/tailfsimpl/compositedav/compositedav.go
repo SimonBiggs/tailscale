@@ -7,6 +7,7 @@
 package compositedav
 
 import (
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -24,7 +25,7 @@ import (
 
 // Child is a child folder of this compositedav.
 type Child struct {
-	dirfs.Child
+	*dirfs.Child
 
 	// BaseURL is the base URL of the WebDAV service to which we'll proxy
 	// requests for this Child. We will append the filename from the original
@@ -72,7 +73,9 @@ type Handler struct {
 	// StatCache is an optional cache for PROPFIND results.
 	StatCache *StatCache
 
-	// childrenMu guards children and staticRoot.
+	// childrenMu guards the fields below. Note that we do read the contents of
+	// children after releasing the read lock, which we can do because we never
+	// modify children but only ever replace it in SetChildren.
 	childrenMu sync.RWMutex
 	children   []*Child
 	staticRoot string
@@ -85,11 +88,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.StatCache != nil && r.Method != "GET" {
-		// TODO(oxtoacart): maybe be more selective about invalidating cache
+	if r.Method != "GET" {
 		// If the user is performing a modification (e.g. PUT, MKDIR, etc),
-		// we need to invalidat the StatCache to make sure we're not knowingly
+		// we need to invalidate the StatCache to make sure we're not knowingly
 		// showing stale stats.
+		// TODO(oxtoacart): maybe be more selective about invalidating cache
 		h.StatCache.invalidate()
 	}
 
@@ -106,19 +109,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handle handles the request locally using our dirfs.FS.
 func (h *Handler) handle(w http.ResponseWriter, r *http.Request) {
 	h.childrenMu.RLock()
-	children := make([]*dirfs.Child, 0, len(h.children))
-	for _, child := range h.children {
-		children = append(children, &child.Child)
+	clk, kids, root := h.Clock, h.children, h.staticRoot
+	h.childrenMu.RUnlock()
+
+	children := make([]*dirfs.Child, 0, len(kids))
+	for _, child := range kids {
+		children = append(children, child.Child)
 	}
 	wh := &webdav.Handler{
 		LockSystem: webdav.NewMemLS(),
 		FileSystem: &dirfs.FS{
-			Clock:      h.Clock,
+			Clock:      clk,
 			Children:   children,
-			StaticRoot: h.staticRoot,
+			StaticRoot: root,
 		},
 	}
-	h.childrenMu.RUnlock()
 
 	wh.ServeHTTP(w, r)
 }
@@ -133,8 +138,8 @@ func (h *Handler) delegate(pathComponents []string, w http.ResponseWriter, r *ht
 	}
 	u, err := url.Parse(child.BaseURL)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+		h.logf("warning: parse base URL %s failed: %s", child.BaseURL, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return childName
 	}
 	u.Path = path.Join(u.Path, shared.Join(pathComponents[1:]...))
@@ -200,29 +205,29 @@ func (h *Handler) findChildLocked(name string) (int, *Child) {
 		return strings.Compare(child.Name, name)
 	})
 	if found {
-		child = h.children[i]
+		return i, h.children[i]
 	}
 	return i, child
 }
 
-// func (h *Handler) logf(format string, args ...any) {
-// 	if h.Logf != nil {
-// 		h.Logf(format, args...)
-// 		return
-// 	}
+func (h *Handler) logf(format string, args ...any) {
+	if h.Logf != nil {
+		h.Logf(format, args...)
+		return
+	}
 
-// 	log.Printf(format, args...)
-// }
+	log.Printf(format, args...)
+}
 
 // maxPathLength calculates the maximum length of a path that can be handled by
-// this handler without delegating to a Child.
+// this handler without delegating to a Child. It's always at least 1, and if
+// staticRoot is configured, it's 2.
 func (h *Handler) maxPathLength(r *http.Request) int {
 	h.childrenMu.RLock()
 	defer h.childrenMu.RUnlock()
 
-	mpl := 1
 	if h.staticRoot != "" {
-		mpl++
+		return 2
 	}
-	return mpl
+	return 1
 }

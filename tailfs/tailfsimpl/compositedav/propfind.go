@@ -24,29 +24,26 @@ func (h *Handler) handlePROPFIND(w http.ResponseWriter, r *http.Request) {
 		// Delegate to a Child.
 		depth := getDepth(r)
 
-		if h.StatCache != nil {
-			cached := h.StatCache.get(r.URL.Path, depth)
-			if cached != nil {
-				w.Header().Del("Content-Length")
-				w.WriteHeader(207)
-				w.Write(cached)
-				return
-			}
+		cached := h.StatCache.get(r.URL.Path, depth)
+		if cached != nil {
+			w.Header().Del("Content-Length")
+			w.WriteHeader(http.StatusMultiStatus)
+			w.Write(cached)
+			return
 		}
 
 		// Use a buffering ResponseWriter so that we can manipulate the result.
+		// The only thing we use from the original ResponseWriter is Header().
 		bw := &bufferingResponseWriter{ResponseWriter: w}
-		var b []byte
 
 		mpl := h.maxPathLength(r)
 		h.delegate(pathComponents[mpl-1:], bw, r)
-		b = bw.buf.Bytes()
 
 		// Fixup paths to add the requested path as a prefix.
 		pathPrefix := shared.Join(pathComponents[0:mpl]...)
-		b = hrefRegex.ReplaceAll(b, []byte(fmt.Sprintf("<D:href>%s/$1</D:href>", pathPrefix)))
+		b := hrefRegex.ReplaceAll(bw.buf.Bytes(), []byte(fmt.Sprintf("<D:href>%s/$1</D:href>", pathPrefix)))
 
-		if h.StatCache != nil && bw.status == 207 {
+		if h.StatCache != nil && bw.status == http.StatusMultiStatus && b != nil {
 			h.StatCache.set(r.URL.Path, depth, b)
 		}
 

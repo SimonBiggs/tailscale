@@ -7,21 +7,20 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"net"
-	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/tailscale/xnet/webdav"
 	"tailscale.com/tailfs/tailfsimpl/shared"
 	"tailscale.com/tstest"
 )
 
 func TestStat(t *testing.T) {
-	cfs, _, _, clock, close := createFileSystem(t)
-	defer close()
+	cfs, _, _, clock := createFileSystem(t)
 
 	tests := []struct {
 		label    string
@@ -35,6 +34,7 @@ func TestStat(t *testing.T) {
 			expected: &shared.StaticFileInfo{
 				Named:      "",
 				Sized:      0,
+				Moded:      0555,
 				ModdedTime: clock.Now(),
 				Dir:        true,
 			},
@@ -45,6 +45,7 @@ func TestStat(t *testing.T) {
 			expected: &shared.StaticFileInfo{
 				Named:      "domain",
 				Sized:      0,
+				Moded:      0555,
 				ModdedTime: clock.Now(),
 				Dir:        true,
 			},
@@ -55,6 +56,7 @@ func TestStat(t *testing.T) {
 			expected: &shared.StaticFileInfo{
 				Named:      "remote1",
 				Sized:      0,
+				Moded:      0555,
 				ModdedTime: clock.Now(),
 				Dir:        true,
 			},
@@ -65,6 +67,7 @@ func TestStat(t *testing.T) {
 			expected: &shared.StaticFileInfo{
 				Named:      "remote2",
 				Sized:      0,
+				Moded:      0555,
 				ModdedTime: clock.Now(),
 				Dir:        true,
 			},
@@ -81,8 +84,8 @@ func TestStat(t *testing.T) {
 		t.Run(test.label, func(t *testing.T) {
 			fi, err := cfs.Stat(ctx, test.name)
 			if test.err != nil {
-				if err == nil || !errors.Is(err, test.err) {
-					t.Errorf("expected error: %v   got: %v", test.err, err)
+				if !errors.Is(err, test.err) {
+					t.Errorf("got %v, want %v", err, test.err)
 				}
 			} else {
 				if err != nil {
@@ -96,8 +99,7 @@ func TestStat(t *testing.T) {
 }
 
 func TestListDir(t *testing.T) {
-	cfs, _, _, clock, close := createFileSystem(t)
-	defer close()
+	cfs, _, _, clock := createFileSystem(t)
 
 	tests := []struct {
 		label    string
@@ -112,6 +114,7 @@ func TestListDir(t *testing.T) {
 				&shared.StaticFileInfo{
 					Named:      "domain",
 					Sized:      0,
+					Moded:      0555,
 					ModdedTime: clock.Now(),
 					Dir:        true,
 				},
@@ -124,18 +127,21 @@ func TestListDir(t *testing.T) {
 				&shared.StaticFileInfo{
 					Named:      "remote1",
 					Sized:      0,
+					Moded:      0555,
 					ModdedTime: clock.Now(),
 					Dir:        true,
 				},
 				&shared.StaticFileInfo{
 					Named:      "remote2",
 					Sized:      0,
+					Moded:      0555,
 					ModdedTime: clock.Now(),
 					Dir:        true,
 				},
 				&shared.StaticFileInfo{
 					Named:      "remote4",
 					Sized:      0,
+					Moded:      0555,
 					ModdedTime: clock.Now(),
 					Dir:        true,
 				},
@@ -153,8 +159,8 @@ func TestListDir(t *testing.T) {
 				infos, err = file.Readdir(0)
 			}
 			if test.err != nil {
-				if err == nil || !errors.Is(err, test.err) {
-					t.Errorf("expected error: %v   got: %v", test.err, err)
+				if !errors.Is(err, test.err) {
+					t.Errorf("got %v, want %v", err, test.err)
 				}
 			} else {
 				if err != nil {
@@ -174,8 +180,7 @@ func TestListDir(t *testing.T) {
 }
 
 func TestMkdir(t *testing.T) {
-	fs, _, _, _, close := createFileSystem(t)
-	defer close()
+	fs, _, _, _ := createFileSystem(t)
 
 	tests := []struct {
 		label string
@@ -207,8 +212,8 @@ func TestMkdir(t *testing.T) {
 		t.Run(test.label, func(t *testing.T) {
 			err := fs.Mkdir(ctx, test.name, test.perm)
 			if test.err != nil {
-				if err == nil || !errors.Is(err, test.err) {
-					t.Errorf("expected error: %v   got: %v", test.err, err)
+				if !errors.Is(err, test.err) {
+					t.Errorf("got %v, want %v", err, test.err)
 				}
 			} else if err != nil {
 				t.Errorf("unexpected error: %v", err)
@@ -218,8 +223,7 @@ func TestMkdir(t *testing.T) {
 }
 
 func TestRemoveAll(t *testing.T) {
-	fs, _, _, _, close := createFileSystem(t)
-	defer close()
+	fs, _, _, _ := createFileSystem(t)
 
 	tests := []struct {
 		label string
@@ -237,16 +241,15 @@ func TestRemoveAll(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.label, func(t *testing.T) {
 			err := fs.RemoveAll(ctx, test.name)
-			if err == nil || !errors.Is(err, test.err) {
-				t.Errorf("expected error: %v   got: %v", test.err, err)
+			if !errors.Is(err, test.err) {
+				t.Errorf("got %v, want %v", err, test.err)
 			}
 		})
 	}
 }
 
 func TestRename(t *testing.T) {
-	fs, _, _, _, close := createFileSystem(t)
-	defer close()
+	fs, _, _, _ := createFileSystem(t)
 
 	tests := []struct {
 		label   string
@@ -266,16 +269,16 @@ func TestRename(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.label, func(t *testing.T) {
 			err := fs.Rename(ctx, test.oldName, test.newName)
-			if err == nil || test.err.Error() != err.Error() {
-				t.Errorf("expected error: %v   got: %v", test.err, err)
+			if !errors.Is(err, test.err) {
+				t.Errorf("got %v, want: %v", err, test.err)
 			}
 		})
 	}
 }
 
-func createFileSystem(t *testing.T) (webdav.FileSystem, string, string, *tstest.Clock, func()) {
-	l1, dir1 := startRemote(t)
-	l2, dir2 := startRemote(t)
+func createFileSystem(t *testing.T) (webdav.FileSystem, string, string, *tstest.Clock) {
+	s1, dir1 := startRemote(t)
+	s2, dir2 := startRemote(t)
 
 	// Make some files, use perms 0666 as lowest common denominator that works
 	// on both UNIX and Windows.
@@ -309,45 +312,35 @@ func createFileSystem(t *testing.T) (webdav.FileSystem, string, string, *tstest.
 		},
 	}
 
-	return fs, dir1, dir2, clock, func() {
-		defer l1.Close()
+	t.Cleanup(func() {
+		defer s1.Close()
 		defer os.RemoveAll(dir1)
-		defer l2.Close()
+		defer s2.Close()
 		defer os.RemoveAll(dir2)
-	}
+	})
+
+	return fs, dir1, dir2, clock
 }
 
-func startRemote(t *testing.T) (net.Listener, string) {
+func startRemote(t *testing.T) (*httptest.Server, string) {
 	dir := t.TempDir()
-
-	l, err := net.Listen("tcp", "127.0.0.1:")
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	h := &webdav.Handler{
 		FileSystem: webdav.Dir(dir),
 		LockSystem: webdav.NewMemLS(),
 	}
 
-	s := &http.Server{Handler: h}
-	go s.Serve(l)
-
-	return l, dir
+	return httptest.NewServer(h), dir
 }
 
 func infosEqual(t *testing.T, expected, actual fs.FileInfo) {
 	t.Helper()
-	if expected.Name() != actual.Name() {
-		t.Errorf("expected name: %v   got: %v", expected.Name(), actual.Name())
+	sfi, ok := actual.(*shared.StaticFileInfo)
+	if ok {
+		// zero out BirthedTime because we don't want to compare that
+		sfi.BirthedTime = time.Time{}
 	}
-	if expected.Size() != actual.Size() {
-		t.Errorf("expected Size: %v   got: %v", expected.Size(), actual.Size())
-	}
-	if !expected.ModTime().Truncate(time.Second).UTC().Equal(actual.ModTime().Truncate(time.Second).UTC()) {
-		t.Errorf("expected ModTime: %v   got: %v", expected.ModTime(), actual.ModTime())
-	}
-	if expected.IsDir() != actual.IsDir() {
-		t.Errorf("expected IsDir: %v   got: %v", expected.IsDir(), actual.IsDir())
+	if diff := cmp.Diff(actual, expected); diff != "" {
+		t.Errorf("Wrong file info (-got, +want):\n%s", diff)
 	}
 }

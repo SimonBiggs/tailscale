@@ -23,7 +23,7 @@ func (dfs *FS) Stat(ctx context.Context, name string) (fs.FileInfo, error) {
 
 	child := dfs.childFor(nameWithoutStaticRoot)
 	if child == nil {
-		return nil, os.ErrNotExist
+		return nil, &os.PathError{Op: "stat", Path: name, Err: os.ErrNotExist}
 	}
 
 	return shared.ReadOnlyDirInfo(name, dfs.now()), nil

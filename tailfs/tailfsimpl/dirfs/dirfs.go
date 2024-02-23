@@ -18,9 +18,10 @@ import (
 type Child struct {
 	// Name is the name of the child
 	Name string
+
 	// Available is a function indicating whether or not the child is currently
 	// available. Unavailable children are excluded from the FS's directory
-	// listing.
+	// listing. Available must be safe for concurrent use.
 	Available func() bool
 }
 

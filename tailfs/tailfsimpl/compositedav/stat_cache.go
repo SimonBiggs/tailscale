@@ -21,18 +21,22 @@ type StatCache struct {
 	TTL time.Duration
 
 	// mu guards the below values.
-	mu     sync.Mutex
-	caches map[int]*ttlcache.Cache[string, []byte]
+	mu                   sync.Mutex
+	cachesByDepthAndPath map[int]*ttlcache.Cache[string, []byte]
 }
 
 func (c *StatCache) get(name string, depth int) []byte {
+	if c == nil {
+		return nil
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.caches == nil {
+	if c.cachesByDepthAndPath == nil {
 		return nil
 	}
-	cache := c.caches[depth]
+	cache := c.cachesByDepthAndPath[depth]
 	if cache == nil {
 		return nil
 	}
@@ -44,28 +48,36 @@ func (c *StatCache) get(name string, depth int) []byte {
 }
 
 func (c *StatCache) set(name string, depth int, value []byte) {
+	if c == nil {
+		return
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.caches == nil {
-		c.caches = make(map[int]*ttlcache.Cache[string, []byte])
+	if c.cachesByDepthAndPath == nil {
+		c.cachesByDepthAndPath = make(map[int]*ttlcache.Cache[string, []byte])
 	}
-	cache := c.caches[depth]
+	cache := c.cachesByDepthAndPath[depth]
 	if cache == nil {
 		cache = ttlcache.New(
 			ttlcache.WithTTL[string, []byte](c.TTL),
 		)
 		go cache.Start()
-		c.caches[depth] = cache
+		c.cachesByDepthAndPath[depth] = cache
 	}
 	cache.Set(name, value, ttlcache.DefaultTTL)
 }
 
 func (c *StatCache) invalidate() {
+	if c == nil {
+		return
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for _, cache := range c.caches {
+	for _, cache := range c.cachesByDepthAndPath {
 		cache.DeleteAll()
 	}
 }
@@ -74,7 +86,7 @@ func (c *StatCache) stop() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for _, cache := range c.caches {
+	for _, cache := range c.cachesByDepthAndPath {
 		cache.Stop()
 	}
 }

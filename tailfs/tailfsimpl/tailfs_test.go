@@ -191,7 +191,7 @@ func (s *system) addRemote(name string) {
 		remotes,
 		&http.Transport{
 			DisableKeepAlives:     true,
-			ResponseHeaderTimeout: 1 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
 		})
 }
 

@@ -26,5 +26,5 @@ func (dfs *FS) Mkdir(ctx context.Context, name string, perm os.FileMode) error {
 		return nil
 	}
 
-	return os.ErrPermission
+	return &os.PathError{Op: "mkdir", Path: name, Err: os.ErrPermission}
 }

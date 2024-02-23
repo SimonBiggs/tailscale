@@ -73,7 +73,7 @@ func (s *FileSystemForLocal) SetRemotes(domain string, remotes []*tailfs.Remote,
 	children := make([]*compositedav.Child, 0, len(remotes))
 	for _, remote := range remotes {
 		children = append(children, &compositedav.Child{
-			Child: dirfs.Child{
+			Child: &dirfs.Child{
 				Name:      remote.Name,
 				Available: remote.Available,
 			},

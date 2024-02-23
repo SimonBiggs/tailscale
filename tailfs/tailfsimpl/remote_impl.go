@@ -101,7 +101,7 @@ func (s *FileSystemForRemote) SetShares(shares map[string]*tailfs.Share) {
 
 func (s *FileSystemForRemote) buildChild(share *tailfs.Share) *compositedav.Child {
 	return &compositedav.Child{
-		Child: dirfs.Child{
+		Child: &dirfs.Child{
 			Name: share.Name,
 		},
 		BaseURL: fmt.Sprintf("http://%v/%v", hex.EncodeToString([]byte(share.Name)), url.PathEscape(share.Name)),
