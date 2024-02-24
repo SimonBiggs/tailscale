@@ -425,6 +425,16 @@ func NewUserspaceEngine(logf logger.Logf, conf Config) (_ Engine, reterr error) 
 		}
 	}()
 
+	go func() {
+		select {
+		case <-e.wgdev.Wait():
+			e.logf("Closing the engine because the WireGuard device has been closed...")
+			e.Close()
+		case <-e.waitCh:
+			// continue
+		}
+	}()
+
 	e.logf("Bringing WireGuard device up...")
 	if err := e.wgdev.Up(); err != nil {
 		return nil, fmt.Errorf("wgdev.Up: %w", err)
@@ -1112,8 +1122,8 @@ func (e *userspaceEngine) Close() {
 	}
 }
 
-func (e *userspaceEngine) Wait() {
-	<-e.waitCh
+func (e *userspaceEngine) Done() <-chan struct{} {
+	return e.waitCh
 }
 
 func (e *userspaceEngine) linkChange(delta *netmon.ChangeDelta) {
