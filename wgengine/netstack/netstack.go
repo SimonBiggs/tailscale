@@ -94,7 +94,7 @@ func maxInFlightConnectionAttempts() int {
 		//
 		// TODO(andrew-d): tune this based on the amount of system
 		// memory instead of a fixed limit.
-		return 8192
+		return 524288
 	default:
 		// On all other platforms, return a reasonably high value that
 		// most users won't hit.
