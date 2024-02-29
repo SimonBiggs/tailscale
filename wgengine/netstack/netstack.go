@@ -285,7 +285,7 @@ func (ns *Impl) Start(lb *ipnlocal.LocalBackend) error {
 	ns.lb = lb
 	// size = 0 means use default buffer size
 	const tcpReceiveBufferSize = 0
-	const maxInFlightConnectionAttempts = 1024
+	const maxInFlightConnectionAttempts = 524288
 	tcpFwd := tcp.NewForwarder(ns.ipstack, tcpReceiveBufferSize, maxInFlightConnectionAttempts, ns.acceptTCP)
 	udpFwd := udp.NewForwarder(ns.ipstack, ns.acceptUDP)
 	ns.ipstack.SetTransportProtocolHandler(tcp.ProtocolNumber, ns.wrapProtoHandler(tcpFwd.HandlePacket))
